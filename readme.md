@@ -57,6 +57,7 @@ sudo mv promtool /usr/local/bin/
 sudo chown prometheus:prometheus /usr/local/bin/prometheus
 sudo chown prometheus:prometheus /usr/local/bin/promtool
 ```
+* `/usr/local/bin` is used to store executables for locally installed software, typically included in the system's PATH environment
                                                                      
 8. Create the service file:
 ```console
