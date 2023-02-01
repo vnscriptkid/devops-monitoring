@@ -9,6 +9,9 @@ Prometheus provides its own web UI, but we'll also be pairing it with Grafana la
 ```console
 sudo useradd --no-create-home --shell /bin/false prometheus
 ```
+* This command creates a new user on a Linux system named "prometheus"
+* The "--no-create-home" option ensures that no home directory is created for the user
+* The "--shell /bin/false" option sets the user's shell to "/bin/false", which is a special shell used for system accounts that provides no interactive login capability.
 
 2. Create the directories in which we'll be storing our configuration files and libraries:
 ```console
@@ -20,6 +23,7 @@ sudo mkdir /var/lib/prometheus
 ```console
 sudo chown prometheus:prometheus /var/lib/prometheus
 ```
+* Changes the ownership of the directory "/var/lib/prometheus" to the user "prometheus" and the group "prometheus"
 
 4. Pull down the `tar.gz` file from the [Prometheus downloads page](https://prometheus.io/download/):
 ```console
@@ -31,6 +35,9 @@ wget https://github.com/prometheus/prometheus/releases/download/v2.7.1/prometheu
 ```console
 tar -xvf prometheus-2.7.1.linux-amd64.tar.gz
 ```
+* x: extract (uncompress and extract the contents of the archive)
+* v: verbose (show detailed information about the extraction process)
+* f: file (specifies the archive file name that is to be extracted)
                                                                      
 6. Move the configuration file and set the owner to the `prometheus` user:
 ```console
@@ -39,6 +46,7 @@ sudo mv console* /etc/prometheus
 sudo mv prometheus.yml /etc/prometheus
 sudo chown -R prometheus:prometheus /etc/prometheus
 ```
+* The option -R (or --recursive) is used to apply the change recursively to all subdirectories and files within the target directory
                                                                
 7. Move the binaries and set the owner:
 ```console
@@ -81,6 +89,8 @@ WantedBy=multi-user.target
 ```console
 sudo systemctl daemon-reload
 ```
+* Reloads the system manager configuration, which allows any changes made to the system manager configuration files to take effect.
+* Used when you have made changes to the Systemd configuration files
 
  10. Start Prometheus, and make sure it automatically starts on boot:
 ```console
