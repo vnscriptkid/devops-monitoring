@@ -211,7 +211,8 @@ sudo dpkg -i grafana_5.4.3_amd64.deb
 ```console
 sudo systemctl enable --now grafana-server
 ```
-
+* The --now option of the systemctl enable command is equivalent to running `sudo systemctl start grafana-server`
+ 
 4. Access Grafana's web UI by going to IPADDRESS:3000.
 
 5. Log in with the username admin and the password admin. Reset the password when prompted.
