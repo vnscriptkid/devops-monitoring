@@ -278,8 +278,8 @@ ExecStart=/usr/local/bin/node_exporter
 
 [Install]
 WantedBy=multi-user.target
-Save and exit when done.
 ```
+Save and exit when done.
 
 6. Start the Node Exporter:
 ```console
@@ -313,6 +313,9 @@ sudo systemctl restart prometheus
 sudo apt-get install stress
 stress -m 2
 ```
+- The `-m 2` option specifies the number of worker threads that will be used to put stress on the system's memory
+ - allocate a large amount of memory
+ - perform various memory-intensive operations, such as read/write, allocate/deallocate memory
  
 Wait for about one minute, and then view the graph to see the difference in activity.
 
