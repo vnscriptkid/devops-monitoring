@@ -18,6 +18,8 @@ sudo useradd --no-create-home --shell /bin/false prometheus
 sudo mkdir /etc/prometheus
 sudo mkdir /var/lib/prometheus
 ```
+* `/etc` is the configuration directory and it contains configuration files for various applications and services on the system
+* `/var/lib` is the data directory and it contains data files and databases used by various applications and services on the system
  
 3. Set the ownership of the `/var/lib/prometheus` directory:
 ```console
