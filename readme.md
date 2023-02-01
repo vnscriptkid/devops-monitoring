@@ -229,3 +229,96 @@ sudo systemctl enable --now grafana-server
 * Click on the gear icon to the upper right.
 * Set the Name of the dashboard to Forethought.
 * Save the changes.
+
+## Setup Node Exporter
+
+1. Create a system user:
+
+```console
+sudo useradd --no-create-home --shell /bin/false node_exporter
+```
+ 
+2. Download the Node Exporter from Prometheus's download page (http://prometheus.io/download):
+```console
+cd /tmp/
+
+wget https://github.com/prometheus/node_exporter/releases/download/v0.17.0/node_exporter-0.17.0.linux-amd64.tar.gz
+
+tar -xvf node_exporter-0.17.0.linux-amd64.tar.gz
+```
+ 
+3. Move into the newly created directory, Move the provided binary:
+
+```console
+cd node_exporter-0.17.0.linux-amd64/
+
+sudo mv node_exporter /usr/local/bin/
+```
+ 
+4. Set the ownership:
+```console
+$ sudo chown node_exporter:node_exporter /usr/local/bin/node_exporter
+```
+
+5. Create a systemd service file:
+```console
+sudo vim /etc/systemd/system/node_exporter.service
+```
+
+```
+[Unit]
+Description=Node Exporter
+After=network.target
+
+[Service]
+User=node_exporter
+Group=node_exporter
+Type=simple
+ExecStart=/usr/local/bin/node_exporter
+
+[Install]
+WantedBy=multi-user.target
+Save and exit when done.
+```
+
+6. Start the Node Exporter:
+```console
+sudo systemctl daemon-reload
+sudo systemctl start node_exporter
+```
+ 
+7. Add the endpoint to the Prometheus configuration file:
+
+```console
+sudo $EDITOR /etc/prometheus/prometheus.yml
+```
+
+```
+- job_name: 'nodeexporter'
+  static_configs:
+  - targets: ['localhost:9100']
+```
+
+8. Restart Prometheus:
+```console
+sudo systemctl restart prometheus
+```
+ 
+9. Navigate to the Prometheus web UI. Using the expression editor, search for cpu, meminfo, and related system terms to view the newly added metrics.
+
+10. Search for `node_memory_MemFree_bytes` in the expression editor; shorten the time span for the graph to be about 30 minutes of data.
+
+11. Back on the terminal, download and run stress to cause some memory spikes:
+```console
+sudo apt-get install stress
+stress -m 2
+```
+ 
+Wait for about one minute, and then view the graph to see the difference in activity.
+
+References
+Node Exporter Metrics
+https://github.com/prometheus/node_exporter/blob/master/README.md
+ 
+ 
+ 
