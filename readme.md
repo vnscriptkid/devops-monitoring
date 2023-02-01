@@ -192,3 +192,37 @@ sudo systemctl enable alertmanager
 
 Visit PUBLICIP:9093 in your browser to confirm Alertmanager is working.
  
+## Setup Grafana
+
+1. Install the prerequisite package:
+```console
+sudo apt-get install libfontconfig
+```
+
+2. Download and install Grafana using the .deb package provided on the Grafana download page (https://grafana.com/grafana/download):
+```console
+wget https://dl.grafana.com/oss/release/grafana_5.4.3_amd64.deb
+sudo dpkg -i grafana_5.4.3_amd64.deb
+```
+ 
+3. Ensure Grafana starts at boot:
+```console
+sudo systemctl enable --now grafana-server
+```
+
+4. Access Grafana's web UI by going to IPADDRESS:3000.
+
+5. Log in with the username admin and the password admin. Reset the password when prompted.
+
+6. Add a Data Source
+* Click Add data source on the homepage.
+* Select Prometheus.
+* Set the URL to http://localhost:9090.
+* Click Save & Test.
+
+7. Add a Dashboard
+* From the left menu, return Home.
+* Click New dashboard. The dashboard is automatically created.
+* Click on the gear icon to the upper right.
+* Set the Name of the dashboard to Forethought.
+* Save the changes.
