@@ -204,6 +204,8 @@ sudo apt-get install libfontconfig
 wget https://dl.grafana.com/oss/release/grafana_5.4.3_amd64.deb
 sudo dpkg -i grafana_5.4.3_amd64.deb
 ```
+* The `dpkg` command is a package manager for Debian-based systems
+* `-i` option tells it to install the package specified by the file name that follows
  
 3. Ensure Grafana starts at boot:
 ```console
