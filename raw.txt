@@ -1,0 +1,1130 @@
+https://acloudguru-content-attachment-production.s3-accelerate.amazonaws.com/1633973199451-Lesson%20Resources%20and%20Descriptions-DevOps%20Monitoring%20Deep%20Dive.txt
+
+DevOps Monitoring Deep Dive
+
+Lesson Descriptions and Resources:
+
+Lecture: Deploying the Demo Application
+
+If we're going to have a monitoring course, we need something to monitor! Part of that is going to be our Ubuntu 18.04 host, but another equally important part is going to be a web application that already exists on the provided Playground server for this course. The application is a simple to-do list program called Forethought that uses the Express web framework to do most of the hard work for us. The application has also been Dockerized and saved as an image (also called forethought) and is ready for us to deploy.
+
+Steps in This Video
+List the contents of the forethought directory and subdirectories:
+
+ $ ls
+Confirm the creation of the existing Docker image:
+
+ $ docker image list
+Deploy the web application to a container. Map port 8080 on the container to port 80 on the host:
+
+ $ docker run --name ft-app -p 80:8080 -d forethought
+Check that the application is working correctly by visiting the server's provided URL.
+
+Using a Custom Environment
+Vagrantfile
+Use the following Vagrantfile to spin up an Ubuntu 18.04 server:
+
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+
+  config.vm.define "app" do |app|
+    app.vm.box = "bento/ubuntu-18.04"
+    app.vm.hostname = "app"
+    app.vm.network "private_network", ip: "192.168.50.88"
+  end
+
+end
+Preparing the Environment
+If using Vagrant or otherwise, follow these steps to set up an environment that mimics the one of our Cloud Playground:
+
+Install Docker and related packages:
+
+ sudo apt-get install apt-transport-https ca-certificates curl gnupg2 software-properties-common
+ curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add
+ sudo apt-key fingerprint 0EBFCD88
+ sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu bionic stable"
+ sudo apt-get install docker-ce
+Enable sudo-less Docker:
+
+ sudo usermod -aG docker vagrant
+Substitute vagrant with whatever user you intend on using. Refresh your Bash session before continuing.
+
+Install Node.js and NPM:
+
+ curl -sL https://deb.nodesource.com/setup_10.x -o nodesource_setup.sh
+ sudo chmod +x nodesource_setup.sh
+ sudo ./nodesource_setup.sh
+ sudo apt-get install nodejs
+ sudo apt-get install build-essential
+Add the forethought application to the home directory (or whatever directory you wish to work from):
+
+ sudo apt-get install git -y
+ git clone https://github.com/linuxacademy/content-devops-monitoring-app.git forethought
+Create an image:
+
+ cd forethought
+ docker build -t ft-app .
+You can now pick up from the videos!
+
+
+
+
+
+Lecture: Prometheus Setup
+
+Now that we have what we're monitoring set up, we need to get our monitoring tool itself up and running, complete with a service file. Prometheus is a pull-based monitoring system that scrapes various metrics set up across our system and stores them in a time-series database, where we can use a web UI and the PromQL language to view trends in our data. Prometheus provides its own web UI, but we'll also be pairing it with Grafana later, as well as an alerting system.
+
+Steps in This Video
+Create a system user for Prometheus:
+
+ sudo useradd --no-create-home --shell /bin/false prometheus
+
+
+Create the directories in which we'll be storing our configuration files and libraries:
+
+ sudo mkdir /etc/prometheus
+ sudo mkdir /var/lib/prometheus
+
+
+Set the ownership of the /var/lib/prometheus directory:
+
+ sudo chown prometheus:prometheus /var/lib/prometheus
+
+
+Pull down the tar.gz file from the Prometheus downloads page (https://prometheus.io/download/):
+
+ cd /tmp/
+ wget https://github.com/prometheus/prometheus/releases/download/v2.7.1/prometheus-2.7.1.linux-amd64.tar.gz
+
+
+Extract the files:
+
+ tar -xvf prometheus-2.7.1.linux-amd64.tar.gz
+
+
+Move the configuration file and set the owner to the prometheus user:
+
+ cd prometheus-2.7.1.linux-amd64
+ sudo mv console* /etc/prometheus
+ sudo mv prometheus.yml /etc/prometheus
+ sudo chown -R prometheus:prometheus /etc/prometheus
+
+
+Move the binaries and set the owner:
+
+ sudo mv prometheus /usr/local/bin/
+ sudo mv promtool /usr/local/bin/
+ sudo chown prometheus:prometheus /usr/local/bin/prometheus
+ sudo chown prometheus:prometheus /usr/local/bin/promtool
+
+
+Create the service file:
+
+ sudo vim /etc/systemd/system/prometheus.service
+
+
+Add:
+
+[Unit]
+Description=Prometheus
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=prometheus
+Group=prometheus
+Type=simple
+ExecStart=/usr/local/bin/prometheus \
+    --config.file /etc/prometheus/prometheus.yml \
+    --storage.tsdb.path /var/lib/prometheus/ \
+    --web.console.templates=/etc/prometheus/consoles \
+    --web.console.libraries=/etc/prometheus/console_libraries
+
+[Install]
+WantedBy=multi-user.target
+Save and exit. (For VIM, press ESC, :, wq to save and exit.)
+
+
+Reload systemd:
+
+ sudo systemctl daemon-reload
+Start Prometheus, and make sure it automatically starts on boot:
+
+ sudo systemctl start prometheus
+ sudo systemctl enable prometheus
+
+
+Visit Prometheus in your web browser at PUBLICIP:9090.
+
+
+
+Lecture: Alertmanager Setup
+
+Monitoring is never just monitoring. Ideally, we'll be recording all these metrics and looking for trends so we can better react when things go wrong and make smart decisions. And once we have an idea of what we need to look for when things go wrong, we need to make sure we know about it. This is where alerting applications like Prometheus's standalone Alertmanager come in.
+
+Steps in This Video
+Create the alertmanager system user:
+
+sudo useradd --no-create-home --shell /bin/false alertmanager
+Create the /etc/alertmanager directory:
+
+sudo mkdir /etc/alertmanager
+Download Alertmanager from the Prometheus downloads page (https://prometheus.io/download/):
+
+cd /tmp/
+wget https://github.com/prometheus/alertmanager/releases/download/v0.16.1/alertmanager-0.16.1.linux-amd64.tar.gz
+Extract the files:
+
+tar -xvf alertmanager-0.16.1.linux-amd64.tar.gz
+Move the binaries:
+
+cd alertmanager-0.16.1.linux-amd64
+sudo mv alertmanager /usr/local/bin/
+sudo mv amtool /usr/local/bin/
+Set the ownership of the binaries:
+
+sudo chown alertmanager:alertmanager /usr/local/bin/alertmanager
+sudo chown alertmanager:alertmanager /usr/local/bin/amtool
+Move the configuration file into the /etc/alertmanager directory:
+
+sudo mv alertmanager.yml /etc/alertmanager/
+Set the ownership of the /etc/alertmanager directory:
+
+sudo chown -R alertmanager:alertmanager /etc/alertmanager/
+Create the alertmanager.service file for systemd:
+
+sudo $EDITOR /etc/systemd/system/alertmanager.service
+Copy and Paste content:
+
+[Unit]
+Description=Alertmanager
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=alertmanager
+Group=alertmanager
+Type=simple
+WorkingDirectory=/etc/alertmanager/
+ExecStart=/usr/local/bin/alertmanager \
+    --config.file=/etc/alertmanager/alertmanager.yml
+[Install]
+WantedBy=multi-user.target
+Save and exit.
+
+Stop Prometheus, and then update the Prometheus configuration file to use Alertmanager:
+
+sudo systemctl stop prometheus
+sudo $EDITOR /etc/prometheus/prometheus.yml
+
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets:
+      - localhost:9093
+Reload systemd, and then start the prometheus and alertmanager services:
+
+sudo systemctl daemon-reload
+sudo systemctl start prometheus
+sudo systemctl start alertmanager
+Make sure alertmanager starts on boot:
+
+sudo systemctl enable alertmanager
+Visit PUBLICIP:9093 in your browser to confirm Alertmanager is working.
+
+
+
+
+
+Lecture: Grafana Setup
+
+While Prometheus provides us with a web UI to view our metrics and craft charts, the web UI alone is often not the best solution to visualizing our data. Grafana is a robust visualization platform that will allow us to better see trends in our metrics and give us insight into what's going on with our applications and servers. It also lets us use multiple data sources, not just Prometheus, which gives us a full view of what's happening.
+
+Steps in This Video
+Install the prerequisite package:
+
+sudo apt-get install libfontconfig
+Download and install Grafana using the .deb package provided on the Grafana download page (https://grafana.com/grafana/download):
+
+wget https://dl.grafana.com/oss/release/grafana_5.4.3_amd64.deb
+sudo dpkg -i grafana_5.4.3_amd64.deb
+Ensure Grafana starts at boot:
+
+sudo systemctl enable --now grafana-server
+Access Grafana's web UI by going to IPADDRESS:3000.
+
+Log in with the username admin and the password admin. Reset the password when prompted.
+
+Add a Data Source
+Click Add data source on the homepage.
+
+Select Prometheus.
+
+Set the URL to http://localhost:9090.
+
+Click Save & Test.
+
+Add a Dashboard
+From the left menu, return Home.
+
+Click New dashboard. The dashboard is automatically created.
+
+Click on the gear icon to the upper right.
+
+Set the Name of the dashboard to Forethought.
+
+Save the changes.
+
+
+
+
+
+Lecture: Push or Pull
+
+Within monitoring there is an age-old battle that puts the debate between Vim versus Emacs to shame: whether or not to use a push- or pull-based monitoring solution. And while Prometheus is a pull-based monitoring system, it's important to know your options before actually implementing your monitoring â€” after all, this is a course about gathering and using your monitoring data, not a course on Prometheus itself.
+
+Pull-Based Monitoring
+When using a pull system to monitor your environments and applications, we're having the monitoring solution itself query our metrics endpoints, such as the one located at :3000/metrics on our Playground server itself. This is specifically our Grafana metrics, but it looks the same regardless of the endpoint.
+
+Pull-based systems allow us to better check the status of our targets, let us run monitoring from virtually anywhere, and provide us with web endpoints we can check for our metrics. That said, they are not without their concerns: Since a pull-based system is doing the scraping, the metrics might not be as "live" as an event-based push system, and if you have a particularly complicated network setup, then it might be difficult to grant the monitoring solution access to all the endpoints it needs to connect with.
+
+Push-Based Monitoring
+Push-based monitoring solutions offload a lot of the "work" from the monitoring platform to the endpoints themselves: The endpoints are the ones that push their metrics up to the monitoring application. Push systems are especially useful when you need event-based monitoring, and can't wait every 15 or so seconds for the data to be pulled in. They also allow for greater modularity, offloading most of the difficult work to the clients they serve.
+
+That said, many push-based systems have greater setup requirements and overhead than pull-based ones, and the majority of the managing isn't done through only the monitoring server.
+
+Which to Choose
+Despite the debate, one system is not necessarily better than the other, and a lot of it will depend on your individual needs. Not sure which is best for you? I would suggest taking the time to set a system of either type up on a dev environment and note the pain points â€” because anything causing trouble on a test environment is going to cause bigger problems on production, and those issues will most likely dictate which system works best for you.
+
+
+
+
+Lecture: Patterns and Anti-Patterns
+
+Unfortunately for us, there are a lot of ways to do inefficient monitoring. From monitoring the wrong thing to spending too much time setting up the coolest new monitoring tool, monitoring can often become a relentless series of broken and screaming alerts for problems we're not sure how to fix. In this lesson, we'll address some of the most common monitoring issues and think about how to avoid them.
+
+Thinking It's About the Tools
+While finding the right tool is important, having a select amount of carefully curated monitoring tools that suit your needs will take you much farther than simply using a tool because you heard it was the best. Never try to force your needs to fit a tool's abilities.
+
+Falling into Cargo Cults
+Just because Google does it doesn't mean we should! Just as we need to think about our needs when we select our tools, we also need to think about our needs when we set them up. Ask yourself why you're monitoring something the way you are, and consider how that monitoring affects your alerting. Is the CPU alarm going off because of an unknown CPU problem, or should the "application spun up too many processes" alarm be going off instead?
+
+Net Embracing Automation
+No one should be manually enrolling their services into Prometheus â€” or any monitoring solution! Automating the process of enrollment from the start will allow monitoring to happen more naturally and prevent tedious, easily forgotten tasks. We also want to take the time to look at our runbooks and see what problems can have automated solutions.
+
+Leaving One Person in Charge
+Monitoring is something everyone should be at least a little considerate of â€” and it definitely shouldn't just be the job of one person. Instead, monitoring should be considered from the very start of a project, and any work needed to monitor a service should be planned.
+
+
+
+
+Lecture: Service Discovery
+
+We've used a lot of terms interchangeably in this course up until now â€” client, service, endpoint, target â€” but all these things are just something we are monitoring. And the process of our monitoring system discovering what we're monitoring is called service discovery. While we'll be doing it manually throughout this course (since we only have a very minimal system), in practice, we'd want to consider automating the task out by using some kind of service discovery tool.
+
+Tool Options
+Consul
+http://www.consul.io/
+Zookeeper
+https://zookeeper.apache.org/
+Nerve
+https://github.com/airbnb/nerve
+
+Any service discovery tool native to your existing platform:
+AWS
+Azure
+GCP
+Kubernetes
+Marathon
+... and more!
+
+
+
+
+Lecture: Using the Node Exporter
+
+Right now, our monitoring system only monitors itself; which, while beneficial, is not the most helpful when it comes to maintaining and monitoring all our systems as a whole. We instead have to add endpoints that will allow Prometheus to scrape data for our application, container, and infrastructure. In this lesson, we'll be starting with infrastructure monitoring by introducing Prometheus's Node Exporter. The Node Exporter sends system data to Prometheus via a metrics page with minimal setup on our part, leaving us to focus on more practical tasks.
+
+Much like Prometheus and Alertmanager, to add an exporter to our server, we need to do a little bit of leg work.
+
+Steps in This Video
+Create a system user:
+
+$ sudo useradd --no-create-home --shell /bin/false node_exporter
+Download the Node Exporter from Prometheus's download page (http://prometheus.io/download):
+
+$ cd /tmp/
+$ wget https://github.com/prometheus/node_exporter/releases/download/v0.17.0/node_exporter-0.17.0.linux-amd64.tar.gz
+Extract its contents; note that the versioning of the Node Exporter may be different:
+
+ $ tar -xvf node_exporter-0.17.0.linux-amd64.tar.gz
+Move into the newly created directory:
+
+$ cd node_exporter-0.17.0.linux-amd64/
+Move the provided binary:
+
+$ sudo mv node_exporter /usr/local/bin/
+Set the ownership:
+
+$ sudo chown node_exporter:node_exporter /usr/local/bin/node_exporter
+Create a systemd service file:
+
+$ sudo vim /etc/systemd/system/node_exporter.service
+
+[Unit]
+Description=Node Exporter
+After=network.target
+
+[Service]
+User=node_exporter
+Group=node_exporter
+Type=simple
+ExecStart=/usr/local/bin/node_exporter
+
+[Install]
+WantedBy=multi-user.target
+Save and exit when done.
+
+Start the Node Exporter:
+
+$ sudo systemctl daemon-reload
+$ sudo systemctl start node_exporter
+Add the endpoint to the Prometheus configuration file:
+
+$ sudo $EDITOR /etc/prometheus/prometheus.yml
+
+- job_name: 'nodeexporter'
+  static_configs:
+  - targets: ['localhost:9100']
+Restart Prometheus:
+
+$ sudo systemctl restart prometheus
+Navigate to the Prometheus web UI. Using the expression editor, search for cpu, meminfo, and related system terms to view the newly added metrics.
+
+Search for node_memory_MemFree_bytes in the expression editor; shorten the time span for the graph to be about 30 minutes of data.
+
+Back on the terminal, download and run stress to cause some memory spikes:
+
+$ sudo apt-get install stress
+$ stress -m 2
+Wait for about one minute, and then view the graph to see the difference in activity.
+
+References
+Node Exporter Metrics
+https://github.com/prometheus/node_exporter/blob/master/README.md
+
+
+
+
+
+Lecture: CPU Metrics
+
+Run stress -c 5 on your server before starting this lesson.
+
+With the Node Exporter up and running, we now have access to a number of infrastructure metrics on Prometheus, including data about our CPU. The processing power of our server determines how well basically everything on our server runs, so keeping track of its cycles can be invaluable for diagnosing problems and reviewing trends in how our applications and services are running.
+
+For almost all monitoring solutions, including Prometheus, data for this metric is pulled from the /proc/stat file on the host itself, and in Prometheus these metrics are provided to us in expressions that start with node_cpu. Assuming we're not running any guests on our host, the core expression for this that we want to review is the node_cpu_seconds_total metric.
+
+node_cpu_seconds_total works as a counter â€” that is, it keeps track of how long the CPU spends in each mode, in seconds, and adds it to a persistent count. Counters might not seem especially helpful on their own, but combined with the power of math, we can actually get a lot of information out of it.
+
+Most of the time, what would be helpful here is viewing the percentages and averages that our CPU spends in either the idle more or any working modes. In Prometheus, we can do this with the rate and irate queries, which calculate the per-second average change in the given time series in a range. irate is specifically for fast-moving counters (like our CPU); both should be used with counter-based metrics specifically.
+
+We can see what amount of time our server spends in each mode by running irate(node_cpu_seconds_total[30s]) * 100 in the expression editor with a suggested limit of 30m, assuming you're using a cloud playground server.
+
+Additionally, we can check for things like the percentage of time the CPU is performing userland processes:
+
+irate(node_cpu_seconds_total{mode="user"}[1m]) * 100
+Or we can determine averages across our entire fleet with the avg operator for Prometheus:
+
+avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100
+Other metrics to consider include the node_cpu_guest_seconds_total metric, which works similarly to node_cpu_seconds_total but is especially useful for any machine running guest virtual machines.
+
+Remember to kill the stress process you started at the beginning of this lesson!
+
+
+
+
+Lecture: Memory Metrics
+
+Run stress -m 1 on your server before starting this lesson.
+
+When it comes to looking at our memory metrics, there are a few core metrics we want to consider. Memory metrics for Prometheus and other monitoring systems are retreived through the /proc/meminfo file; in Prometheus in particular, these metrics are prefixed with node_memory in the expression editor, and quite a number of them exist. However, of the vast array of memory information we have access to, there are only a few core ones we will have to concern ourselves with much of the time:
+
+node_memory_MemTotal_bytes
+node_memory_MemFree_bytes
+node_memory_MemAvailable_bytes
+node_memory_Buffers_bytes
+node_memory_Cached_bytes
+Those who do a bit of systems administration, incident response, and the like have probably used free before to check the memory of a system. The metric expressions listed above provide us with what is essentially the same data as free but in a time series where we can witness trends over time or compare memory between multiple system builds.
+
+node_memory_MemTotal_bytes provides us with the amount of memory on the server as a whole â€” in other words, if we have 64 GB of memory, then this would always be 64 GB of memory, until we allocate more. While on its own this is not the most helpful number, it helps us calculate the amount of in-use memory:
+
+node_memory_MemTotal_bytes - node_memory_MemFree_bytes
+Here, node_memory_MemFree_bytes denotes the amount of free memory left on the system, not including caches and buffers that can be cleared. To see the amount of available memory, including caches and buffers that can be opened up, we would use node_memory_MemAvailable_bytes. And if we wanted to see the cache and buffer data itself, we would use node_memory_Cached_bytes and node_memory_Buffers_bytes, respectively.
+
+
+
+
+Lecture: Disk Metrics
+
+Run stress -i 40 on your server before starting this lesson.
+
+Disk metrics are specifically related to the performance of reads and writes to our disks, and are most commonly pulled from /proc/diskstats. Prefixed with node_disk, these metrics track both the amount of data being processed during I/O operations and the amount of time these operations take, among some other features.
+
+The Node Exporter filters out any loopback devices automatically, so when we view our metric data in the expression editor, we get only the information we need without a lot of noise. For example, if we run iostat -x on our terminal, we'll receive detailed information about our xvda device on top of five loop devices.
+
+Now, we can collect information similar to iostat -x itself across a time series via our expression editor. This includes using irate to view the disk usage of this I/O operation across our host:
+
+irate(node_disk_io_time_seconds_total[30s])
+Additionally, we can use the node_disk_io_time_seconds_total metric alongside our node_disk_read_time_seconds_total and node_disk_write_time_seconds_total metrics to calculate the percentage of time spent on each kind of I/O operation:
+
+irate(node_disk_read_time_seconds_total[30s]) / irate(node_disk_io_time_seconds_total[30s])
+
+irate(node_disk_write_time_seconds_total[30s]) / irate(node_disk_io_time_seconds_total[30s])
+Additionally, we're also provided with a gauge-based metric that lets us see how many I/O operations are occurring at a point in time:
+
+node_disk_io_now
+Other metrics include:
+
+node_disk_read_bytes_total and node_disk_written_bytes_total, which track the amount of bytes read or written, respectively
+node_disk_reads_completed_total and node_disk_writes_completed_total, which track the amount of reads and writes
+node_disk_reads_merged_total and node_disk_writes_merged_total, which track read and write merges
+
+
+
+
+
+Lecture: File System Metrics
+
+File system metrics contain information about our mounted file systems. These metrics are taken from a few different sources, but all use the node_filesystem prefix when we view them in Prometheus.
+
+Although most of the seven metrics we're provided here are fairly straightforward, there are some caveats we want to address â€” the first being the difference between node_filesystem_avail_bytes and node_filesystem_free_bytes. While for some systems these two metrics may be the same, in many Unix systems a portion of the disk is reserved for the root user. In this case, node_filesystem_free_bytes contains the amount of free space, including the space reserved for root, while node_filesystem_avail_bytes contains only the available space for all users.
+
+Let's go ahead and look at the node_filesystem_avail_bytes metric in our expression editor. Notice how we have a number of file systems mounted that we can view: Our main xvda disk, the LXC file system for our container, and various temporary file systems. If we wanted to limit which file systems we view on the graph, we can uncheck the systems we're not interested in.
+
+The file system collector also supplies us with more labels than we've previously seen. Labels are the key-value pairs we see in the curly brackets next to the metric. We can use these to further manipulate our data, as we saw in previous lessons. So, if we wanted to view only our temporary file systems, we can use:
+
+node_filesystem_avail_bytes{fstype="tmpfs"}
+Of course, these features can be used across all metrics and are not just limited to the file system. Other metrics may also have their own specific labels, much like the fstype and mountpoint labels here.
+
+
+
+
+Lecture: Networking Metrics
+
+
+When we discuss network monitoring through the Node Exporter, we're talking about viewing networking data from a systems administration or engineering viewpoint: The Node Exporter provides us with networking device information pulled both from /proc/net/dev and /sys/class/net/INTERFACE, with INTERFACE being the name of the interface itself, such as eth0. All network metrics are prefixed with the node_network name.
+
+Should we take a look at node_network in the expression editor, we can see quite a number of options â€” many of these are information gauges whose data is pulled from that /sys/class/net/INTERFACE directory. So, when we look at node_network_dormant, we're seeing point-in-time data from the /sys/class/net/INTERFACE/dormant file.
+
+But with regards to metrics that the average user will need in terms of day-to-day monitoring, we really want to look at the metrics prepended with either node_network_transmit or node_network_receive, as this contains information about the amount of data/packets that pass through our networking, both outbound (transmit) and inbound (receive). Specifically, we want to look at the node_network_receive_bytes_total or node_network_transmit_bytes_total metrics, because these are what will help us calculate our network bandwidth:
+
+rate(node_network_transmit_bytes_total[30s])
+rate(node_network_receive_bytes_total[30s])
+The above expressions will show us the 30-second average of bytes either transmitted or received across our time series, allowing us to see when our network bandwidth has spiked or dropped.
+
+
+
+
+Lecture: Load Metrics
+
+When we talk about load, we're referencing the amount of processes waiting to be served by the CPU. You've probably seen these metrics before: They're sitting at the top of any top command run, and are available for us to view in the /proc/loadavg file. Taken every 1, 5, and 15 minutes, the load average gives us a snapshot of how hard our system is working. We can view these statistics in Prometheus at node_load1, node_load5, and node_load15.
+
+That said, load metrics are mostly useless from a monitoring standpoint. What is a heavy load to one server can be an easy load for another, and beyond looking at any trends in load in the time series, there is nothing we can alert on here nor any real data we can extract through queries or any kind of math.
+
+
+
+
+Lecture: Using cAdvisor to Monitor Containers
+
+Although we have our host monitored for various common metrics at this time, the Node Exporter doesn't cross the threshold into monitoring our containers. Instead, if we want to monitor anything we have in Docker, including our application, we need to add a container monitoring solution.
+
+Lucky for us, Google's cAdvisor is an open-source solution that works out of the box with most container platforms, including Docker. And once we have cAdvisor installed, we can see much of the same metrics we see for our host on our container, only these are provided to us through the prefix container.
+
+cAdvisor also monitors all our containers automatically. That means when we view a metric, we're seeing it for everything that cAvisor monitors. Should we want to target specific containers, we can do so by using the name label, which pulls the container name from the name it uses in Docker itself.
+
+Steps in This Video
+Launch cAdvisor:
+
+ $ sudo docker run \
+   --volume=/:/rootfs:ro \
+   --volume=/var/run:/var/run:ro \
+   --volume=/sys:/sys:ro \
+   --volume=/var/lib/docker/:/var/lib/docker:ro \
+   --volume=/dev/disk/:/dev/disk:ro \
+   --publish=8000:8080 \
+   --detach=true \
+   --name=cadvisor \
+   google/cadvisor:latest
+List available containers to confirm it's working:
+
+ $ docker ps
+Update the Prometheus config:
+
+ $ sudo $EDITOR /etc/prometheus/prometheus.yml
+
+   - job_name: 'cadvisor'
+     static_configs:
+     - targets: ['localhost:8000']
+Restart Prometheus:
+
+ $ sudo systemctl restart prometheus
+
+
+
+
+Lecture: Using a Client Library
+
+For us to actually add metrics into custom application that will not have available exporters and tools, we need to first add the client library for Prometheus to our application. Prometheus itself supports four client libraries â€” Go, Java, Python, and Ruby â€” but third-party client libraries are provided for a number of other languages, including Node.js, which is what our own application uses.
+
+For us to get started with instrumenting metrics on our app, we're going to need to add this library. But the Node.js prom-client is not restricted to just allowing us to write new metrics; it also includes some default application metrics we can enable, mostly centered around the application's use of memory.
+
+Of course, adding this library isn't enough in and of itself: We also need to make sure we have a /metrics endpoint generated that Prometheus can scrape, which we'll be creating using the Express framework our application already utilizes.
+
+Steps in This Video
+Move into the forethought directory:
+
+ cd forethought
+Install the prom-client via npm, Node.js's package manager:
+
+ npm install prom-client --save
+Open the index.js file, where we'll be adding all of our metrics code:
+
+ vim index.js
+Require the use of the prom-client by adding it to our variable list:
+
+ var express = require('express');
+ var bodyParser = require('body-parser');
+ var app = express();
+ const prom = require('prom-client');
+With prom being the name we'll use when calling the client library.
+
+Enable default metrics scraping:
+
+ const collectDefaultMetrics = prom.collectDefaultMetrics;
+ collectDefaultMetrics({ prefix: 'forethought' });
+Use Express to create the /metrics endpoint and call in the Prometheus data:
+
+ app.get('/metrics', async function (req, res) {
+   res.set('Content-Type', prom.register.contentType);
+   res.end(await prom.register.metrics());
+ });
+
+
+
+
+Lecture: Counters
+
+The most common metric we've come across thus far, we already know counters measure how many times something happens or how long something happens â€” anything where we have to record an increasing amount of something. This can be useful for tracking requests, page hits, or how many times someone has used one particular API function â€” whatever we need to track.
+
+In the case of our application, we're going to use the Prometheus client library to create a counter that will keep track of how many name tasks are added to our to-do list over the course of its life. To do this, we first need to define our metric and give it a name, then we need to call that metric in the part of our code we want to keep track of â€” such as our app.post function that adds our task.
+
+Steps in This Video
+Open up the index.js file:
+
+ cd forethought
+ $EDITOR index.js
+Define a new metric called forethought_number_of_todos_total that works as a counter:
+
+ // Prometheus metric definitions
+ const todocounter = new prom.Counter({
+   name: 'forethought_number_of_todos_total',
+   help: 'The number of items added to the to-do list, total'
+ });
+Call the new metric in the addtask post function so it increases by one every time the function is called while adding a task:
+
+ // add a task
+ app.post("/addtask", function(req, res) {
+   var newTask = req.body.newtask;
+   task.push(newTask);
+   res.redirect("/");
+   todocounter.inc();
+ });
+Save and exit.
+
+Test the application:
+
+ node index.js
+While the application is running, visit MYLABSERVER:8080 and add a few tasks to the to-do list.
+
+Visit MYLABSERVER:8080/metrics to view your newly created metric!
+
+
+
+
+
+Lecture: Gauges
+
+We know gauges track the state of our metric across the time series â€” whether that be an amount of memory being used, how long a request or response takes, or how often an event is happening. Within our own application, we want to use a gauge so that we not only track how many tasks are being added (as we did in the previous lesson), but also how many tasks are being completed, giving us a look at how many active tasks are left and the velocity at which our users are completing their to-dos.
+
+Steps in This Video
+Define the new gauge metric for tracking tasks added and completed:
+
+const todogauge = new prom.Gauge ({
+  name: 'forethought_current_todos',
+  help: 'Amount of incomplete tasks'
+});
+Add a gauge .inc() to the /addtask method:
+
+// add a task
+app.post("/addtask", function(req, res) {
+  var newTask = req.body.newtask;
+  task.push(newTask);
+  res.redirect("/");
+  todocounter.inc();
+  todogauge.inc();
+});
+Add a gauge dec() to the /removetask method:
+
+// remove a task
+app.post("/removetask", function(req, res) {
+  var completeTask = req.body.check;
+  if (typeof completeTask === "string") {
+    complete.push(completeTask);
+    task.splice(task.indexOf(completeTask), 1);
+  }
+  else if (typeof completeTask === "object") {
+    for (var i = 0; i < completeTask.length; i++) {
+      complete.push(completeTask[i]);
+      task.splice(task.indexOf(completeTask[i]), 1);
+      todogauge.dec();
+    }
+  }
+  res.redirect("/");
+});
+Save and exit the file.
+
+Test the application:
+
+node index.js
+While the application is running, visit MYLABSERVER:8080 and add a few tasks to the to-do list.
+
+Visit MYLABSERVER:8080/metrics to view your newly created metric!
+
+
+
+
+
+Lecture: Summaries and Histograms
+
+Both summaries and histrograms are where our more advanced metric types come in. Both work similarly, working across multiple time series to keep track of sample observations, as well as the sum of the values of these observations. Each summary and histrogram contains not only the metrics we want to record â€” such as request time â€” but also the amount of requests (_count) and the sum of the total observations (_sum).
+
+Steps in This Video
+Move into the forethought directory:
+
+ cd forethought
+Install the Node.js module response-time:
+
+ npm install response-time --save
+Open the index.js file:
+
+ $EDITOR index.js
+Define both the summary and histogram metrics:
+
+ const tasksumm = new prom.Summary ({
+   name: 'forethought_requests_summ',
+   help: 'Latency in percentiles',
+ });
+ const taskhisto = new prom.Histogram ({
+   name: 'forethought_requests_hist',
+   help: 'Latency in history form',
+ });
+Call the response-time module with the other variables:
+
+ var responseTime = require('response-time');
+Around where we define our website code, add the response-time function, calling the time parameter within our .observe metrics:
+
+ app.use(responseTime(function (req, res, time) {
+   tasksumm.observe(time);
+   taskhisto.observe(time);
+ }));
+Save and exit the file.
+
+Run the demo application:
+
+ node index.js
+View the demo application on port 8080, and add the tasks to generate metrics.
+
+View the /metrics endpoint. Notice how our response times are automatically sorted into percentiles for our summary. Also notice how we're not using all of our buckets in the histogram.
+
+Return to the command line and use CTRL+C to close the demo application.
+
+Reopen the index.js file:
+
+$EDITOR index.js
+Add the buckets parameter to the histogram definition. We're going to adjust our buckets based on the response times collected:
+
+const taskhisto = new prom.Histogram ({
+  name: 'forethought_requests_hist',
+  help: 'Latency in history form',
+  buckets: [0.1, 0.25, 0.5, 1, 2.5, 5, 10]
+});
+Save and exit. Run node index.js again to test.
+
+
+
+
+Lecture: Redeploying the Application
+
+In this video, we're updating our Docker image to use our newly instrumented version of our application. No Docker knowledge needed â€” just follow these steps!
+
+Stop the current Docker container for our application:
+
+ docker stop ft-app
+Remove the container:
+
+ docker rm ft-app
+Remove the image:
+
+ docker image rm forethought
+Rebuild the image:
+
+ docker build -t forethought .
+Deploy the new container:
+
+ docker run --name ft-app -p 80:8080 -d forethought
+Add the application as an endpoint to Prometheus:
+
+ sudo $EDITOR /etc/prometheus/prometheus.yml
+
+   - job_name: 'forethought'
+     static_configs:
+     - targets: ['localhost:80']
+Save and exit.
+
+Restart Prometheus:
+
+ sudo systemctl restart prometheus
+
+
+
+
+
+Lecture: Recording Rules
+
+With our monitoring set up across multiple levels of our stack, we can now go ahead and start doing more things with the metrics we're recording. Namely, we can begin to use these metrics to record "rules" in Prometheus â€” this essentially lets us pre-run a common PromQL result and record those results. We can then alert on these results as needed.
+
+But what metrics do we even want to alert on? We've already discussed that in an ideal world, we'll be alerting on the issue itself, not the symptom of the issue. But chances are we won't have the insight to know what the issues are until we have our monitoring up and running for a bit and learn the nuances are our system. Instead, in instances where we aren't sure what to alert on, we want to alert based on what the end user experiences.
+
+Steps in This Video
+Using the expression editor, view the uptime of all targets:
+
+ up
+Since we don't want to alert on each individual job and instance we have, let's take the average of our uptime instead:
+
+ avg (up)
+We do not want an average of everything, however. Next, use the without clause to ensure we're not merging our targets by instance:
+
+ avg without (instance) (up)
+Further refine the expression so we only see the uptime for our forethought jobs:
+
+ avg without (instance) (up{job="forethought"})
+Now that we have our expression written, we can look into how to add this as a rule. Switch to your terminal.
+
+Open the Prometheus configuration file:
+
+ $ sudo $EDITOR /etc/prometheus/prometheus.yml
+Locate the rule_files parameter. Add a rule file at rules.yml:
+
+ rule_files:
+   - "rules.yml"
+Save and exit the file.
+
+Create the rules.yml file in /etc/prometheus:
+
+ $ sudo $EDITOR /etc/prometheus/rules.yml
+Every rule needs to be contained in a group. Define a group called uptime, which will track the uptime of anything that affects the end user:
+
+ groups:
+   - name: uptime
+We're first going to define a recording rule, which will keep track of the results of a PromQL expression, without performing any kind of alerting:
+
+groups:
+  - name: uptime
+    rules:
+      - record: job:uptime:average:ft
+        expr: avg without (instance) (up{job="forethought"})
+Notice that format of record â€” this is the setup we need to use to define the name of our recording rule. Once defined, we can call this metric directly in PromQL.
+
+The expr is just the expression, as we would normally write it in the expression editor.
+
+Save and exit the file.
+
+Restart Promtheus for the rules changes to take effect:
+
+$ sudo systemctl restart prometheus
+Return to the web UI and navigate to Status > Rules.
+
+Click on the provided rule â€” it will take us to the expression editor! Return to the Rules page when done.
+
+
+
+
+Lecture: Alerting Rules
+
+With our recording rule created, we can start thinking about creating an alert based on this. For this specific example, we're going to write rules that will alert us when our application containers are 25% down â€” while we only have one application container at this time, on actual production systems, we know we'll be running multiple instances of our application, and one of these containers going down isn't going to devastate us. Instead, we want to watch for the point where our end users will start noticing.
+
+Steps in This Video
+Now that we have a recording rule, we can build our alerting rule based on this. We know we want to alert when we have less than 75% of our application containers up, so we'll use the job:uptime:average:ft < .75 expression:
+
+ groups:
+   - name: uptime
+     rules:
+       - record: job:uptime:average:ft
+         expr: avg without (instance) (up{job="forethought"})
+       - alert: ForethoughtApplicationDown
+         expr: job:uptime:average:ft < .75
+Notice how we define this rule with alert instead of record and that the name does not have to follow the previously defined format.
+
+Save and exit when done.
+
+Restart Prometheus:
+
+ $ sudo systemctl restart prometheus
+Refresh the Rules page to view the second rule.
+
+
+
+
+Lecture: For
+
+With our basic alerting rules set up, we now want to establish our alerts so they work best for us. A major part of this is ensuring we're only alerting when needed. Consider our ForethoughtApplicationDown alert: What if we're restarting a percentage of our application instances to provide updates? We might very well end up causing an alert based on only one instance of 25% of our applications being down â€” and remember, these expressions are run every 10 seconds.
+
+To prevent alerts from firing in instances such as this, we use the for parameter:
+
+groups:
+  - name: uptime
+    rules:
+      - record: job:uptime:average:ft
+        expr: avg without (instance) (up{job="forethought"})
+      - alert: ForethoughtApplicationDown
+        expr: job:uptime:average:ft < .75
+        for: 5m
+When we set for to 5m, we're telling Prometheus to hold the alert in a pending state until it's been down for five minutes. Then â€” and only then â€” will it fire the alert to Alertmanager. This prevents any unnecessary alerting from issues like the above. As your monitoring system matures, you'll often find yourself adjusting this number based on frequency and severity of alerts. Don't be surprised if you end up with for times up to an hour or more!
+
+
+
+Lecture: Annotations
+
+Annotations let us pass in additional information to our alerts. These are written as key-value pairs in the YAML itself and can make use of Go's templating language to pull in special values. Generally, we want to provide any relevant information we can in the annotations, including information about the issue itself, links to any documentation, and debugging information.
+
+Two variables are provided for us to use: $value, which calls the value of the expression that triggered the alert (job:uptime:average:ft < .75 for our example alert), and $label.NAME, which lets us call a label by its name. So if we wanted to call our job label, we would use $label.job.
+
+At the very least, we generally want to include an overview of the issue at hand, ensuring whoever is addressing the issue knows both what the problem is and which parts of your platform are affected:
+
+groups:
+  - name: uptime
+    rules:
+      - record: job:uptime:average:ft
+        expr: avg without (instance) (up{job="forethought"})
+      - alert: ForethoughtApplicationDown
+        expr: job:uptime:average:ft < .75
+        for: 5m
+        annotations:
+          overview: '{{printf "%.2f" $value}}% instances are up for {{ $labels.job }}'
+
+
+
+
+
+Lecture: Labels
+
+Up until this point, much of our configurations for our alerts have been directly for our benefit â€” clear annotations, a for value to make sure we don't get alerted unnecessarily â€” but we also want to include labels for better routing to Alertmanager.
+
+Labels are key-value pairs that will eventually let us sort through our tickets by what we deem important. These should be consistent across your alerts and generally contain information such as severity and which team will take over to address the issue. This way, once we get our alerts into the Alertmanager, we can sort them by these labels, ensuring we're funneling our alerts to the right place.
+
+We can set these alerts via the labels parameter, just as we did for our annotations:
+
+groups:
+  - name: uptime
+    rules:
+      - record: job:uptime:average:ft
+        expr: avg without (instance) (up{job="forethought"})
+      - alert: ForethoughtApplicationDown
+        expr: job:uptime:average:ft < .75
+        for: 5m
+        labels:
+          severity: page
+          team: devops
+        annotations:
+          overview: '{{printf "%.2f" $value}}% instances are up for {{ $labels.job }}'
+
+
+
+
+
+Lecture: Preparing Our Receiver
+
+Before we can actually set up the Alertmanager to pass on alerts, we want to set up a place where we can receive them. For this, we're going to set up a Slack account â€” if you already have access to a workspace you can add applications and test on, just use that and skip this section. Otherwise, we're going to walk through setting up a workspace, adding an app, and configuring it to use webhooks.
+
+Steps in This Video
+Go to slack.com (http://slack.com/) and create a new workspace, following the step-by-step instructions on screen until you are given your workspace. Be sure to add a prometheus channel!
+
+From your chat, use the workspace menu to go to Administration and then Manage apps.
+
+Select Build on the top menu.
+
+Press Start Building, then Create New App. Give your application a name, and then select the workspace you just created. Click Create App when done.
+
+Select Incoming Webhooks from the menu.
+
+Turn webhooks on.
+
+Click Add New Webhook to Workspace, setting the channel name to the prometheus channel. Authorize the webhook.
+
+Make note of the webhook URL.
+
+
+
+Lecture: Using Alertmanager
+
+Now that we have our alerts up and we know they're working, we need to get our actual Alertmanager set up. This is where we'll use our labels to route our alerts to the people and places they need to go. Specifically, we'll route our alert to our Slack channel.
+
+Our Alertmanager configuration is divided into four sections: global, which stores any configuration that will remain consistent across the entire file, such as our email; route, which defines how we want to sort our files to our receivers; receivers, which define the endpoints where we want to receive our alerts; and inhibit_rules, which let us define rules to suppress related alerts so we don't spam messages.
+
+Steps in This Video
+Open the Alertmanager configuration:
+
+ $ sudo $EDITOR /etc/alertmanager/alertmanager.yml
+Set the default route's repeat_interval to one minute and update the receiver to use our Slack endpoint:
+
+ route:
+   receiver: 'slack'
+   group_by: ['alertname']
+   group_wait: 10s
+   group_interval: 10s
+   repeat_interval: 1m
+Create a secondary route that will send severe: page alerts to the Slack receiver; group by the team label:
+
+ route:
+   receiver: 'slack'
+   group_by: ['alertname']
+   group_wait: 10s
+   group_interval: 10s
+   repeat_interval: 1m
+   routes:
+     - match:
+         severity: page
+       group_by: ['team']
+       receiver: 'slack'
+Add a tertiary route that sends all alerts for the devops team to Slack:
+
+ route:
+   receiver: 'slack'
+   group_by: ['alertname']
+   repeat_interval: 1m
+   routes:
+     - match:
+         severity: page
+       group_by: ['team']
+       receiver: 'slack'
+       routes:
+         - match:
+             team: devops
+           receiver: 'slack'
+Update the receiver to use Slack:
+
+ receivers:
+ - name: 'slack'
+   slack_configs:
+     - channel: "#prometheus"
+       api_url: APIKEY
+       text: "Overview: {{ .CommonAnnotations.overview }}"
+Update the inhibit_rules so that any alerts with the severity of ticket for the DevOps team are suppressed when a page-level alert is happening:
+
+ inhibit_rules:
+   - source_match:
+       severity: 'page'
+     target_match:
+       severity: 'ticket'
+     equal: ['team']
+Save and exit.
+
+Restart Alertmanager:
+
+ $ sudo systemctl restart alertmanager
+View your Slack chat and wait to see the firing alert.
+
+
+
+
+Lecture: Silences
+
+Once we have our alert firing, we need to know how to pause the alert for the time it takes us to fix the issue. We can do this from the Alertmanager web UI at port 9093. From there, we have the option to either select Silence next to the alert itself, or click Silences at the top of the screen and select New Silence.
+
+Once we have the silence window open, we're presented with a number of options.
+
+First, we want to set the length of the silence. For an exising alert, set it to the amount of time you think it will take you to troubleshoot the issue. If you're setting an alert for expected downtime, give yourself enough time to complete any downtime tasks and solve unexpected issues.
+
+Finally, we need to make note of who is making the silence and a comment regarding the silence. For this, go ahead and note that the Docker container is down and you're silencing until you restart.
+
+At this point, you may also want to restart your Docker container:
+
+$ docker start ft-app
+
+
+
+Lecture: Adding a Dashboard
+
+When it comes to setting up visualizations that will remain up and running persistently on our Grafana setup, it might seem overwhelming to consider which of our countless metrics we need to rely on. One way to mitigate this problem is using one of the prebuilt dashboards shared to the Grafana community. These dashboards are pre-created setups based on common tools and configurations we frequently see when monitoring various infrastructures, containers, and applications. As much as we want to believe our platform is completely unique â€” and it, technically, most likely is â€” there will be enough similarlities to our setup with ones created by others that pulling in some prebuilt dashboards is a practical way to start.
+
+Steps in This Video
+Log in to your Grafana dashboard at PUBLICIP:3000.
+
+In another tab, go to the Grafana dashboard website (http://grafana.com/dashboards).
+
+Search for the "Node Exporter Full" dashboard, and copy the dashboard ID.
+
+Back on your Grafana instance, select the plus sign on the side menu and click Import. Paste in the dashboard ID.
+
+Create a new folder called "Prometheus", and also select the Prometheus data source. Import.
+
+To edit a panel, select the name of a panel and click Edit. Singlestat panels are the panels that display a single number, while graphs are the primary panels that display data over time via an x- and a-axis.
+
+Exceeded
+
+
+
+Lecture: Building a Panel
+
+Once we get some of the simpler parts of our Grafana setup configured, we'll want to start looking into adding metrics we won't find any pre-created dashboards for, such as metrics related specifically to our application. While using a default Node Exporter dashboard saves us a lot of time and works well for monitoring our infrastructure metrics, we don't want to leave our applications in the dark.
+
+Steps in This Video
+Return to your Grafana instance at port 3000.
+
+Switch to the Forethought dashboard.
+
+Click Add Panel. Select Heatmap.
+
+When the panel appears, click on the name and then Edit.
+
+Switch to the General tab, and set the name of the chart to Response Time Distribution.
+
+Return to the Metrics tab. We're going to calculate the average response time over time of each of our buckets:
+
+ sum(rate(forethought_requests_hist_bucket[30s])) by (le)
+Set the Legend to {{le}}.
+
+From the Axes tab, switch the Data format to Time series buckets.
+
+If desired, further alter the graph's colors and appearance by using the Display tab.
+
+Return to the dashboard.
+
+Click the Save icon, add a comment, and Save.
+
+
+
+
+Lecture: Congratulations and Next Steps
+
+You did it! Congratulations â€” you've taken the time to learn how to use monitoring concepts at all levels of your platform. You're now prepared to not just set up a monitoring stack but use metrics, write metrics into code, and manipulate those metrics across various tools, such as Grafana, to keep track of just what is happening "under the hood" of your system.
+
+Not ready to take a break yet? That's okay! We have plenty of courses that will sate that need to learn:
+
+YAML Essentials
+Monitoring Kubernetes with Prometheus
+Elastic Stack Essentials
+Elasticsearch Deep Dive
